@@ -1010,6 +1010,10 @@ impl ConfigEditor {
                 ui.label("Live theater\nallow same chara");
                 ui.checkbox(&mut config.live_theater_allow_same_chara, "");
                 ui.end_row();
+
+                ui.label("Notifier host (not ends with /)");
+                ui.text_edit_singleline(&mut config.notifier_host);
+                ui.end_row();
             }
         }
 

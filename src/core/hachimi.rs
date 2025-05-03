@@ -257,6 +257,8 @@ pub struct Config {
     pub auto_translate_stories: bool,
     #[serde(default)]
     pub auto_translate_localize: bool,
+    #[serde(default = "Config::default_notifier_host")]
+    pub notifier_host: String,
 
     #[cfg(target_os = "windows")]
     #[serde(flatten)]
@@ -273,6 +275,7 @@ impl Config {
     fn default_ui_scale() -> f32 { 1.0 }
     fn default_story_choice_auto_select_delay() -> f32 { 0.75 }
     fn default_story_tcps_multiplier() -> f32 { 1.0 }
+    fn default_notifier_host() -> String { "http://127.0.0.1:4693".to_owned() }
 }
 
 impl Default for Config {
