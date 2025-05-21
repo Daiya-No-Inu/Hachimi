@@ -1014,6 +1014,10 @@ impl ConfigEditor {
                 ui.label("Notifier host (not ends with /)");
                 ui.text_edit_singleline(&mut config.notifier_host);
                 ui.end_row();
+
+                ui.label("Notifier timeout in ms\nRequire a hard restart");
+                ui.add(egui::Slider::new(&mut config.notifier_timeout_ms, 10..=500).step_by(10.0));
+                ui.end_row();
             }
         }
 

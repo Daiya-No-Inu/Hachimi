@@ -259,6 +259,8 @@ pub struct Config {
     pub auto_translate_localize: bool,
     #[serde(default = "Config::default_notifier_host")]
     pub notifier_host: String,
+    #[serde(default = "Config::default_notifier_timeout_ms")]
+    pub notifier_timeout_ms: u64,
 
     #[cfg(target_os = "windows")]
     #[serde(flatten)]
@@ -276,6 +278,7 @@ impl Config {
     fn default_story_choice_auto_select_delay() -> f32 { 0.75 }
     fn default_story_tcps_multiplier() -> f32 { 1.0 }
     fn default_notifier_host() -> String { "http://127.0.0.1:4693".to_owned() }
+    fn default_notifier_timeout_ms() -> u64 { 100 }
 }
 
 impl Default for Config {
