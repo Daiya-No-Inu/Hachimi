@@ -1,0 +1,74 @@
+name: Create Release
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]')"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Grant execute permission to build script
+        run: chmod +x tools/android/build.sh
+
+      - name: Build Hachimi for Android
+        run: |
+          rustup target add armv7-linux-androideabi aarch64-linux-android i686-linux-android x86_64-linux-android
+          RELEASE=1 ./tools/android/build.sh
+
+      - name: Upload Android binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            build/*.so
+            build/sha1.json
+          
+  build-windows:
+    runs-on: windows-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]')"
+    needs: build-android
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build Hachimi for Windows
+        run: |
+          cargo build --target x86_64-pc-windows-msvc --target-dir build --release
+          move build\x86_64-pc-windows-msvc\release\hachimi.dll build
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/hachimi.dll
+
+  create-release:
+    needs: [build-android, build-windows]
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[ci skip]')"
+    steps:
+      - name: Get latest release info from official
+        id: get_info
+        run: |
+          release_info=$(curl -sL "https://api.github.com/repos/Hachimi-Hachimi/Hachimi/releases/latest" | jq -r '{tag: .tag_name, url: .html_url}')
+          echo "latest_tag=$(echo $release_info | jq -r .tag)" >> $GITHUB_OUTPUT
+          echo "release_url=$(echo $release_info | jq -r .url)" >> $GITHUB_OUTPUT
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+
+      - name: Upload binaries to a release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ${{ steps.get_info.outputs.release_url }}
+          files: |
+            artifacts/android/*
+            artifacts/windows/*
+          tag_name: ${{ steps.get_info.outputs.latest_tag }}
