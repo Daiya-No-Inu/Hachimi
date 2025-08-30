@@ -1,5 +1,9 @@
+#![allow(static_mut_refs)]
+
 #[macro_use] extern crate log;
 #[macro_use] extern crate cstr;
+
+rust_i18n::i18n!("assets/locales", fallback = "en");
 
 #[macro_use] pub mod core;
 pub mod il2cpp;
