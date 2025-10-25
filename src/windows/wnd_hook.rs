@@ -38,6 +38,8 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
 
                 gui.toggle_menu();
                 return LRESULT(0);
+            }else if wparam.0 as u16 == Hachimi::instance().config.load().windows.hide_ingame_ui_hotkey_bind {
+                Thread::main_thread().schedule(Gui::toggle_game_ui);
             }
         },
         WM_CLOSE => {

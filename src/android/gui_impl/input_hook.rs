@@ -1,11 +1,13 @@
 #![allow(non_snake_case)]
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Instant, Duration};
 
 use egui::Vec2;
 use jni::{objects::{JMap, JObject}, sys::{jboolean, jint, JNI_TRUE}, JNIEnv};
 
-use crate::core::{Error, Gui, Hachimi};
+use crate::{core::{Error, Gui, Hachimi}, il2cpp::symbols::Thread};
 
 use super::keymap;
 
@@ -24,9 +26,12 @@ const TOOL_TYPE_MOUSE: jint = 3;
 
 const AXIS_VSCROLL: jint = 9;
 const AXIS_HSCROLL: jint = 10;
+const DOUBLE_TAP_WINDOW: Duration = Duration::from_millis(300);
 
 static VOLUME_UP_PRESSED: AtomicBool = AtomicBool::new(false);
 static VOLUME_DOWN_PRESSED: AtomicBool = AtomicBool::new(false);
+static VOLUME_UP_LAST_TAP: once_cell::sync::Lazy<Arc<Mutex<Option<Instant>>>> = 
+    once_cell::sync::Lazy::new(|| Arc::new(Mutex::new(None)));
 
 static SCROLL_AXIS_SCALE: f32 = 10.0;
 
@@ -131,13 +136,24 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
             .unwrap();
 
         let pressed = action == ACTION_DOWN;
+        let now = Instant::now();
         let other_atomic = match key_code {
             keymap::KEYCODE_VOLUME_UP => {
                 VOLUME_UP_PRESSED.store(pressed, Ordering::Relaxed);
+
+                if pressed {
+                    if Hachimi::instance().config.load().hide_ingame_ui_hotkey && check_volume_up_double_tap(now) {
+                        return JNI_TRUE; 
+                    }
+                }
                 &VOLUME_DOWN_PRESSED
             }
             keymap::KEYCODE_VOLUME_DOWN => {
                 VOLUME_DOWN_PRESSED.store(pressed, Ordering::Relaxed);
+
+                if pressed {
+                    reset_volume_up_tap_state();
+                }
                 &VOLUME_UP_PRESSED
             }
             _ => {
@@ -146,6 +162,10 @@ extern "C" fn nativeInjectEvent(mut env: JNIEnv, obj: JObject, input_event: JObj
                         return get_orig_fn!(nativeInjectEvent, NativeInjectEventFn)(env, obj, input_event);
                     };
                     gui.toggle_menu();
+                }
+                if Hachimi::instance().config.load().hide_ingame_ui_hotkey && pressed
+                    && key_code == Hachimi::instance().config.load().android.hide_ingame_ui_hotkey_bind {
+                    Thread::main_thread().schedule(Gui::toggle_game_ui);
                 }
                 if Gui::is_consuming_input_atomic() {
                     let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap()) else {
@@ -238,6 +258,42 @@ fn get_view(mut env: JNIEnv) -> JObject<'_> {
         .unwrap()
         .l()
         .unwrap()
+}
+
+fn reset_volume_up_tap_state() {
+    let tap_state = &VOLUME_UP_LAST_TAP;
+    if let Ok(mut guard) = tap_state.lock() {
+        *guard = None;
+    }
+}
+
+fn check_volume_up_double_tap(now: Instant) -> bool {
+    let tap_state = &VOLUME_UP_LAST_TAP;
+    let mut is_double_tap = false;
+
+    let mut last_tap_time_guard = match tap_state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            eprintln!("Mutex poisoned: {:?}", poisoned);
+            poisoned.into_inner()
+        }
+    };
+
+    if let Some(last_time) = *last_tap_time_guard {
+        let time_since_last_tap = now.duration_since(last_time);
+
+        if time_since_last_tap <= DOUBLE_TAP_WINDOW {
+            is_double_tap = true;
+            *last_tap_time_guard = None;
+            Thread::main_thread().schedule(Gui::toggle_game_ui);
+        }else {
+            *last_tap_time_guard = Some(now); 
+        }
+    }else {
+        *last_tap_time_guard = Some(now);
+    }
+
+    is_double_tap
 }
 
 pub static mut NATIVE_INJECT_EVENT_ADDR: usize = 0;
