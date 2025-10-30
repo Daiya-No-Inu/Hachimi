@@ -98,7 +98,7 @@ pub fn init() {
 
     // Umamusume
     LibNative_Runtime::init();
-    Gallop_HttpHelper::init();
+    // Gallop_HttpHelper::init();
     umamusume::init();
     Cute_UI_Assembly::init();
     Plugins::init();
