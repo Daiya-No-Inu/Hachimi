@@ -986,6 +986,10 @@ impl ConfigEditor {
                 ui.add(egui::Slider::new(&mut config.ui_scale, 0.1..=10.0).step_by(0.05));
                 ui.end_row();
 
+                ui.label(t!("config_editor.ui_animation_scale"));
+                ui.add(egui::Slider::new(&mut config.ui_animation_scale, 0.1..=10.0).step_by(0.1));
+                ui.end_row();
+
                 ui.label(t!("config_editor.graphics_quality"));
                 Gui::run_combo(ui, "graphics_quality", &mut config.graphics_quality, &[
                     (GraphicsQuality::Default, &t!("default")),
@@ -1061,12 +1065,8 @@ impl ConfigEditor {
                 ui.checkbox(&mut config.live_theater_allow_same_chara, "");
                 ui.end_row();
 
-                ui.label("Notifier host (not ends with /)");
-                ui.text_edit_singleline(&mut config.notifier_host);
-                ui.end_row();
-
-                ui.label("Notifier timeout in ms\nRequire a hard restart");
-                ui.add(egui::Slider::new(&mut config.notifier_timeout_ms, 10..=500).step_by(10.0));
+                ui.label(t!("config_editor.disable_skill_name_translation"));
+                ui.checkbox(&mut config.disable_skill_name_translation, "");
                 ui.end_row();
             }
         }
@@ -1201,8 +1201,6 @@ impl Window for FirstTimeSetupWindow {
                     0 => {
                         ui.heading(t!("first_time_setup.welcome_heading"));
                         ui.separator();
-                        ui.label(t!("first_time_setup.welcome_content"));
-                        ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             ui.label(t!("config_editor.language"));
 
@@ -1216,6 +1214,7 @@ impl Window for FirstTimeSetupWindow {
                                 save_and_reload_config(config);
                             }   
                         });
+                        ui.label(t!("first_time_setup.welcome_content"));
                         true
                     }
                     1 => {
@@ -1233,6 +1232,9 @@ impl Window for FirstTimeSetupWindow {
                                 .show(ui, |ui| {
                                     for (i, repo) in repo_list.iter().enumerate() {
                                         ui.radio_value(&mut self.current_tl_repo, i, &repo.name);
+                                        if let Some(short_desc) = &repo.short_desc {
+                                            ui.label(egui::RichText::new(short_desc).small());
+                                        }
                                     }
                                 });
                             });

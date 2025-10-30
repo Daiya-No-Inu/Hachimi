@@ -71,6 +71,11 @@ first_time_setup:
   welcome_content: >-
     Hachimi has been installed! This will guide you through the initial setup process.
     If you're not interested in using the translation features, you may skip it by closing this dialog.
+
+
+    DISCLAIMER: Hachimi is a community-driven project. All translations were made by various community contributors.
+    It is not developed or endorsed by Cygames, Inc., and violates the game's terms of service. By continuing,
+    you accept that you will be using it at your own risk.
   translation_repo_heading: "Translation repo"
   select_translation_repo: "Select a translation repo:"
   complete_heading: "All done!"
@@ -115,6 +120,7 @@ config_editor:
   target_fps: "Target FPS"
   virtual_resolution_multiplier: "Virtual resolution\nmultiplier"
   ui_scale: "UI scale"
+  ui_animation_scale: "UI animation scale"
   graphics_quality: "Graphics quality"
   vsync: "VSync"
   auto_full_screen: "Auto full screen"
@@ -132,6 +138,7 @@ config_editor:
   force_allow_dynamic_camera: "Force allow\ndynamic camera"
   live_theater_allow_same_chara: "Live theater\nallow same chara"
   physics_update_mode: "Physics update\nmode"
+  disable_skill_name_translation: "Disable skill name\ntranslation"
 
 tl_update_dialog:
   title: "New update available"
@@ -146,3 +153,12 @@ update_prompt_dialog:
 updating_dialog:
   title: "Updating"
   content: "Downloading update, the game will restart shortly..."
+
+steam_overlay_conflict_dialog:
+  title: "Notice"
+  content: >-
+    Purchases might not work with the Hachimi overlay enabled. If the Steam overlay already showed
+    up for you to make a purchase, please ignore this message and press No. If it didn't work, press Yes
+    to temporarily disable the Hachimi overlay. It will close the game, and the next time the game starts up,
+    the Hachimi overlay will be disabled and you will be able to make a purchase. After that, you may restart
+    the game again to re-enable the Hachimi overlay.
