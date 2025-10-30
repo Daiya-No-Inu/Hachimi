@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::hash_map;
 use std::ffi::CStr;
 use std::marker::PhantomData;
@@ -13,7 +14,7 @@ use crate::symbols_impl;
 use crate::core::Error;
 
 use super::api::*;
-use super::ext::{Il2CppObjectExt, MethodInfoExt};
+use super::ext::Il2CppObjectExt;
 use super::types::*;
 use super::types::Il2CppClass;
 use std::ptr::null_mut;
@@ -105,7 +106,7 @@ pub fn get_method_overload(class: *mut Il2CppClass, name: &str, params: &[Il2Cpp
 pub fn get_method_addr(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> usize {
     let res = get_method(class, name, args_count);
     if let Ok(method) = res {
-        unsafe { (*method).method_pointer() }
+        unsafe { (*method).methodPointer }
     }
     else {
         warn!("get_method_addr: {} = NULL", name.to_str().unwrap());
@@ -116,7 +117,7 @@ pub fn get_method_addr(class: *mut Il2CppClass, name: &CStr, args_count: i32) ->
 pub fn get_method_overload_addr(class: *mut Il2CppClass, name: &str, params: &[Il2CppTypeEnum]) -> usize {
     let res = get_method_overload(class, name, params);
     if let Ok(method) = res {
-        unsafe { (*method).method_pointer() }
+        unsafe { (*method).methodPointer }
     }
     else {
         warn!("get_method_overload_addr: {} = NULL", name);
@@ -125,14 +126,14 @@ pub fn get_method_overload_addr(class: *mut Il2CppClass, name: &str, params: &[I
 }
 
 pub static METHOD_CACHE: Lazy<
-    Mutex<FnvHashMap<usize, FnvHashMap<(&'static CStr, i32), usize>>>
+    Mutex<FnvHashMap<usize, FnvHashMap<(Cow<'_, CStr>, i32), usize>>>
 > = Lazy::new(|| Mutex::default());
 
-pub fn get_method_cached(class: *mut Il2CppClass, name: &'static CStr, args_count: i32) -> Result<*const MethodInfo, Error> {
+pub fn get_method_cached(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> Result<*const MethodInfo, Error> {
     let mut cache = METHOD_CACHE.lock().unwrap();
     let entries = match cache.entry(class as usize) {
         hash_map::Entry::Occupied(e) => {
-            if let Some(addr) = e.get().get(&(name, args_count)) {
+            if let Some(addr) = e.get().get(&(name.into(), args_count)) {
                 if *addr == 0 {
                     // Only error that get_method returns
                     return Err(Error::MethodNotFound(name.to_str().unwrap().to_owned()));
@@ -150,14 +151,14 @@ pub fn get_method_cached(class: *mut Il2CppClass, name: &'static CStr, args_coun
         Ok(addr) => addr as usize,
         Err(_) => 0
     };
-    entries.insert((name, args_count), addr);
+    entries.insert((name.to_owned().into(), args_count), addr);
     res
 }
 
-pub fn get_method_addr_cached(class: *mut Il2CppClass, name: &'static CStr, args_count: i32) -> usize {
+pub fn get_method_addr_cached(class: *mut Il2CppClass, name: &CStr, args_count: i32) -> usize {
     let res = get_method_cached(class, name, args_count);
     if let Ok(method) = res {
-        unsafe { (*method).method_pointer() }
+        unsafe { (*method).methodPointer }
     }
     else {
         warn!("get_method_addr_cached: {} = NULL", name.to_str().unwrap());
@@ -280,7 +281,7 @@ impl<T> IEnumerator<T> {
         let class = unsafe { (*self.this).klass() };
         // Get addr manually to avoid nullptr warning
         let get_current_method = get_method_cached(class, c"get_Current", 0);
-        let get_current_addr = get_current_method.map(|m| unsafe { (*m).method_pointer() }).unwrap_or(0);
+        let get_current_addr = get_current_method.map(|m| unsafe { (*m).methodPointer }).unwrap_or(0);
         let move_next_addr = get_method_addr_cached(class, c"MoveNext", 0);
 
         if move_next_addr == 0 {
@@ -481,6 +482,10 @@ impl<K, V> IDictionary<K, V> {
 pub struct Thread(*mut Il2CppThread);
 
 impl Thread {
+    pub fn from_raw(ptr: *mut Il2CppThread) -> Self {
+        Self(ptr)
+    }
+
     fn sync_ctx(&self) -> *mut Il2CppObject {
         let class = unsafe { (*self.0).obj.klass() };
         let get_exec_ctx_addr = get_method_addr_cached(class, c"GetMutableExecutionContext", 0);
@@ -529,6 +534,10 @@ impl Thread {
 
     pub fn main_thread() -> Thread {
         Self::attached_threads().get(0).expect("main thread must be present").clone()
+    }
+
+    pub fn as_raw(&self) -> *mut Il2CppThread {
+        self.0
     }
 }
 

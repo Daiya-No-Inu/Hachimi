@@ -247,7 +247,7 @@ const START_RVA: u32 = 0x782c92;
 fn generate_symbol_map() -> Result<FnvHashMap<&'static str, CString>, Error> {
     let mut map = FnvHashMap::with_capacity(SYMBOL_LIST.len());
 
-    let mut path = utils::get_game_dir().unwrap();
+    let mut path = utils::get_game_dir();
     path.push("UnityPlayer.dll");
     let file_map = FileMap::open(&path)?;
     let pe = PeFile::from_bytes(&file_map)?;

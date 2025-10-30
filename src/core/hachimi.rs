@@ -1,10 +1,10 @@
-use std::{fs, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc}};
+use std::{fs, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc, Mutex}};
 use arc_swap::ArcSwap;
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap, FnvHashSet};
 use once_cell::sync::OnceCell;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}}};
+use crate::{core::plugin_api::Plugin, gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}}};
 
 use super::{game::Game, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
@@ -12,6 +12,7 @@ pub struct Hachimi {
     // Hooking stuff
     pub interceptor: Interceptor,
     pub hooking_finished: AtomicBool,
+    pub plugins: Mutex<Vec<Plugin>>,
 
     // Localized data
     pub localized_data: ArcSwap<LocalizedData>,
@@ -53,9 +54,20 @@ impl Hachimi {
             }
         };
 
+        let config = instance.config.load();
+        if config.disable_gui_once {
+            let mut config = config.as_ref().clone();
+            config.disable_gui_once = false;
+            _ = instance.save_config(&config);
+
+            config.disable_gui = true;
+            instance.config.store(Arc::new(config));
+        }
+
         super::log::init(instance.config.load().debug_mode);
 
         info!("Hachimi {}", env!("HACHIMI_DISPLAY_VERSION"));
+        info!("Game region: {}", instance.game.region);
         instance.load_localized_data();
 
         INSTANCE.set(Arc::new(instance)).is_ok()
@@ -81,9 +93,10 @@ impl Hachimi {
         Ok(Hachimi {
             interceptor: Interceptor::default(),
             hooking_finished: AtomicBool::new(false),
+            plugins: Mutex::default(),
 
             // Don't load localized data initially since it might fail, logging the error is not possible here
-            localized_data: ArcSwap::new(Arc::default()),
+            localized_data: ArcSwap::default(),
             tl_updater: Arc::default(),
 
             game,
@@ -128,10 +141,16 @@ impl Hachimi {
         self.config.store(Arc::new(new_config));
     }
 
-    pub fn save_and_reload_config(&self, config: Config) -> Result<(), Error> {
+    pub fn save_config(&self, config: &Config) -> Result<(), Error> {
         fs::create_dir_all(&self.game.data_dir)?;
         let config_path = self.get_data_path("config.json");
-        utils::write_json_file(&config, &config_path)?;
+        utils::write_json_file(config, &config_path)?;
+
+        Ok(())
+    }
+
+    pub fn save_and_reload_config(&self, config: Config) -> Result<(), Error> {
+        self.save_config(&config)?;
 
         config.language.set_locale();
         self.config.store(Arc::new(config));
@@ -191,6 +210,14 @@ impl Hachimi {
         }
 
         hachimi_impl::on_hooking_finished(self);
+
+        for plugin in self.plugins.lock().unwrap().iter() {
+            info!("Initializing plugin: {}", plugin.name);
+            let res = plugin.init();
+            if !res.is_ok() {
+                info!("Plugin init failed");
+            }
+        }
     }
 
     pub fn get_data_path<P: AsRef<Path>>(&self, rel_path: P) -> PathBuf {
@@ -228,6 +255,8 @@ pub struct Config {
     pub translator_mode: bool,
     #[serde(default)]
     pub disable_gui: bool,
+    #[serde(default)]
+    pub disable_gui_once: bool,
     pub localized_data_dir: Option<String>,
     pub target_fps: Option<i32>,
     #[serde(default = "Config::default_open_browser_url")]
@@ -263,14 +292,16 @@ pub struct Config {
     #[serde(default)]
     pub auto_translate_localize: bool,
     #[serde(default)]
+    pub disable_skill_name_translation: bool,
+    #[serde(default)]
     pub language: Language,
     #[serde(default = "Config::default_meta_index_url")]
     pub meta_index_url: String,
     pub physics_update_mode: Option<SpringUpdateMode>,
-    #[serde(default = "Config::default_notifier_host")]
-    pub notifier_host: String,
-    #[serde(default = "Config::default_notifier_timeout_ms")]
-    pub notifier_timeout_ms: u64,
+    #[serde(default = "Config::default_ui_animation_scale")]
+    pub ui_animation_scale: f32,
+    #[serde(default)]
+    pub disabled_hooks: FnvHashSet<String>,
 
     #[cfg(target_os = "windows")]
     #[serde(flatten)]
@@ -288,8 +319,7 @@ impl Config {
     fn default_story_choice_auto_select_delay() -> f32 { 0.75 }
     fn default_story_tcps_multiplier() -> f32 { 1.0 }
     fn default_meta_index_url() -> String { "https://files.leadrdrk.com/hachimi/meta/index.json".to_owned() }
-    fn default_notifier_host() -> String { "http://127.0.0.1:4693".to_owned() }
-    fn default_notifier_timeout_ms() -> u64 { 100 }
+    fn default_ui_animation_scale() -> f32 { 1.0 }
 }
 
 impl Default for Config {
