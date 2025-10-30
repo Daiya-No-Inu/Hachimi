@@ -1068,6 +1068,10 @@ impl ConfigEditor {
                 ui.label(t!("config_editor.disable_skill_name_translation"));
                 ui.checkbox(&mut config.disable_skill_name_translation, "");
                 ui.end_row();
+
+                ui.label(t!("config_editor.disable_skill_name_translation"));
+                ui.checkbox(&mut config.disable_skill_name_translation, "");
+                ui.end_row();
             }
         }
 
