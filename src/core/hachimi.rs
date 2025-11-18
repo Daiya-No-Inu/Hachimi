@@ -125,11 +125,6 @@ impl Hachimi {
         }
         else {
             let mut config = Config::default();
-
-            if *region == Region::Global {
-                config.skip_first_time_setup = true;
-            }
-
             Ok(config)
         }
     }
