@@ -77,7 +77,7 @@ pub mod UnityEngine_UI;
 pub mod UnityEngine_UIModule;
 pub mod Unity_TextMeshPro;
 
-pub mod Gallop_HttpHelper;
+// pub mod Gallop_HttpHelper;
 pub mod LibNative_Runtime;
 pub mod umamusume;
 pub mod Cute_UI_Assembly;

@@ -1,11 +1,13 @@
-use std::{fs, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc, Mutex}};
+use std::{fs, io, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc, Mutex}, thread};
 use arc_swap::ArcSwap;
 use fnv::{FnvHashMap, FnvHashSet};
 use once_cell::sync::OnceCell;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{core::plugin_api::Plugin, gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}}};
-
+use crate::android::plugin;
+#[cfg(target_os = "android")]
+use crate::android::plugin::init;
 use super::{game::Game, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
 pub struct Hachimi {
@@ -117,7 +119,7 @@ impl Hachimi {
         })
     }
 
-    fn load_config(data_dir: &Path) -> Result<Config, Error> {
+    fn load_config(data_dir: &Path) -> io::Result<Config> {
         let config_path = data_dir.join("config.json");
         if fs::metadata(&config_path).is_ok() {
             let json = fs::read_to_string(&config_path)?;
@@ -211,6 +213,10 @@ impl Hachimi {
 
         hachimi_impl::on_hooking_finished(self);
 
+        #[cfg(target_os = "android")]
+        plugin::init();
+
+        #[cfg(target_os = "windows")]
         for plugin in self.plugins.lock().unwrap().iter() {
             info!("Initializing plugin: {}", plugin.name);
             let res = plugin.init();
@@ -298,10 +304,6 @@ pub struct Config {
     #[serde(default = "Config::default_meta_index_url")]
     pub meta_index_url: String,
     pub physics_update_mode: Option<SpringUpdateMode>,
-    #[serde(default = "Config::default_notifier_host")]
-    pub notifier_host: String,
-    #[serde(default = "Config::default_notifier_timeout_ms")]
-    pub notifier_timeout_ms: u64,
     #[serde(default = "Config::default_ui_animation_scale")]
     pub ui_animation_scale: f32,
     #[serde(default)]
@@ -324,8 +326,6 @@ impl Config {
     fn default_story_tcps_multiplier() -> f32 { 1.0 }
     fn default_meta_index_url() -> String { "https://files.leadrdrk.com/hachimi/meta/index.json".to_owned() }
     fn default_ui_animation_scale() -> f32 { 1.0 }
-    fn default_notifier_host() -> String { "http://127.0.0.1:4693".to_owned() }
-    fn default_notifier_timeout_ms() -> u64 { 100 }
 }
 
 impl Default for Config {
