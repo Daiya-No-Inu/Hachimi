@@ -50,31 +50,31 @@ export CARGO_TARGET_I686_LINUX_ANDROID_LINKER="$TOOLCHAIN_DIR/bin/i686-linux-and
 
 mkdir -p build
 cargo build --target=aarch64-linux-android --target-dir=build $CARGOARGS
-cargo build --target=armv7-linux-androideabi --target-dir=build $CARGOARGS
-cargo build --target=x86_64-linux-android --target-dir=build $CARGOARGS
-cargo build --target=i686-linux-android --target-dir=build $CARGOARGS
+#cargo build --target=armv7-linux-androideabi --target-dir=build $CARGOARGS
+#cargo build --target=x86_64-linux-android --target-dir=build $CARGOARGS
+#cargo build --target=i686-linux-android --target-dir=build $CARGOARGS
 
 pushd build
 
 cp "aarch64-linux-android/$BUILD_TYPE/libhachimi.so" libmain-arm64-v8a.so
-cp "armv7-linux-androideabi/$BUILD_TYPE/libhachimi.so" libmain-armeabi-v7a.so
-cp "x86_64-linux-android/$BUILD_TYPE/libhachimi.so" libmain-x86_64.so
-cp "i686-linux-android/$BUILD_TYPE/libhachimi.so" libmain-x86.so
+#cp "armv7-linux-androideabi/$BUILD_TYPE/libhachimi.so" libmain-armeabi-v7a.so
+#cp "x86_64-linux-android/$BUILD_TYPE/libhachimi.so" libmain-x86_64.so
+#cp "i686-linux-android/$BUILD_TYPE/libhachimi.so" libmain-x86.so
 
 if [ "$RELEASE" = "1" ]; then
     ARM64_V8A_SHA1=($(sha1sum libmain-arm64-v8a.so))
-    ARMEABI_V7A_SHA1=($(sha1sum libmain-armeabi-v7a.so))
-    X86_64_SHA1=($(sha1sum libmain-x86_64.so))
-    X86_SHA1=($(sha1sum libmain-x86.so))
+#    ARMEABI_V7A_SHA1=($(sha1sum libmain-armeabi-v7a.so))
+#    X86_64_SHA1=($(sha1sum libmain-x86_64.so))
+#    X86_SHA1=($(sha1sum libmain-x86.so))
 
     cat << EOF > sha1.json
 {
     "libmain-arm64-v8a.so": "$ARM64_V8A_SHA1",
-    "libmain-armeabi-v7a.so": "$ARMEABI_V7A_SHA1",
-    "libmain-x86_64.so": "$X86_64_SHA1",
-    "libmain-x86.so": "$X86_SHA1"
+
 }
 EOF
 fi
-
+#    "libmain-armeabi-v7a.so": "$ARMEABI_V7A_SHA1",
+#    "libmain-x86_64.so": "$X86_64_SHA1",
+#    "libmain-x86.so": "$X86_SHA1"
 popd
