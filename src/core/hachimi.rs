@@ -5,9 +5,8 @@ use once_cell::sync::OnceCell;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{core::plugin_api::Plugin, gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}}};
-use crate::android::plugin;
 #[cfg(target_os = "android")]
-use crate::android::plugin::init;
+use crate::android::plugin;
 use super::{game::Game, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
 pub struct Hachimi {
