@@ -21,6 +21,7 @@ default: "Default"
 off: "Off"
 on: "On"
 enable: "Enable"
+info: "Info"
 warning: "Warning"
 confirm_dialog_title: "Confirm"
 soft_restart_confirm_content: "Are you sure you want to soft restart the game?"
@@ -51,6 +52,7 @@ menu:
   soft_restart: "\uf021 Soft restart"
   open_in_game_browser: "\uf0ac Open in-game browser"
   toggle_game_ui: "\uf06e Toggle game UI"
+  discord_rpc: "Discord RPC"
 
 notification:
   saved_localize_dump: "Saved to localize_dump.json"
@@ -64,6 +66,8 @@ notification:
   errors_during_update: "%{count} errors occurred during update. Check logs for more info."
   checking_for_updates: "Checking for updates..."
   no_updates: "No updates available."
+  press_to_set_menu_key: "Press a key in the game window to set the open-menu hotkey."
+  menu_open_key_set: "Open-menu hotkey set to %{key}"
 
 first_time_setup:
   title: "First Time Setup"
@@ -78,15 +82,17 @@ first_time_setup:
     you accept that you will be using it at your own risk.
   translation_repo_heading: "Translation repo"
   select_translation_repo: "Select a translation repo:"
+  no_compatible_repo: "No translation repos are compatible with this game version."
+  skip_translation: "Skip translations."
   complete_heading: "All done!"
   complete_content: >-
-    The translation repo has been set. Once you click on Done, the configuration will
-    be saved and an update check will be performed, which will prompt you to download the
-    new translation data.
+    Click on Done to save the configuration.
+    If you chose a translation repo, an update check will be performed,
+    which will prompt you to download the new translation data.
 
 about:
   title: "About"
-  copyright: "© 2024-2025 LeadRDRK and contributors"
+  copyright: "© 2024-%{year} LeadRDRK and contributors"
   view_license: "View license"
   check_for_updates: "Check for updates"
 
@@ -103,6 +109,7 @@ config_editor:
   graphics_tab: "\uf03e Graphics"
   gameplay_tab: "\uf11b Gameplay"
   language: "Language"
+  restore_defaults: "Restore Defaults"
   disable_overlay: "Disable overlay (GUI)"
   disable_overlay_warning: >-
     This option will disable the Hachimi overlay after you restart the game,
@@ -116,6 +123,12 @@ config_editor:
   enable_ipc: "Enable IPC"
   ipc_listen_all: "IPC listen all"
   auto_translate_stories: "Auto translate\nstories"
+  auto_tl_warning: >-
+    Enabling this option requires a compatible translation provider to be
+    installed on your computer or a cloud service using the same framework as
+    py3translationServer. Without a provider installed, no additional translation
+    will happen and gameplay may be affected. Please leave this option disabled
+    if you do not have a translation framework installed.
   auto_translate_ui: "Auto translate UI\n(MIGHT BREAK UIs)"
   target_fps: "Target FPS"
   virtual_resolution_multiplier: "Virtual resolution\nmultiplier"
@@ -139,6 +152,14 @@ config_editor:
   live_theater_allow_same_chara: "Live theater\nallow same chara"
   physics_update_mode: "Physics update\nmode"
   disable_skill_name_translation: "Disable skill name\ntranslation"
+  hide_ingame_ui_hotkey: "Hide ingame UI\nhotkey"
+  hide_ingame_ui_hotkey_info: >-
+    This option allows a shortcut key to toggle the ingame UI.
+    For Android, it's double tap the Volume Up key within 0.3 seconds.
+    For PC/Android with keyboard, it's the Insert key. This key can also be changed in the config file.
+  discord_rpc: "Discord RPC"
+  menu_open_key: "Open menu hotkey"
+  menu_open_key_set: "Press to set"
 
 tl_update_dialog:
   title: "New update available"
@@ -162,3 +183,46 @@ steam_overlay_conflict_dialog:
     to temporarily disable the Hachimi overlay. It will close the game, and the next time the game starts up,
     the Hachimi overlay will be disabled and you will be able to make a purchase. After that, you may restart
     the game again to re-enable the Hachimi overlay.
+key_names:
+  left: "Left arrow"
+  right: "Right arrow"
+  up: "Up arrow"
+  down: "Down arrow"
+  insert: "Insert"
+  delete: "Delete"
+  home: "Home"
+  end: "End"
+  page_up: "Page Up"
+  page_down: "Page Down"
+  escape: "Escape"
+  tab: "Tab"
+  enter: "Enter"
+  space: "Space"
+  backspace: "Backspace"
+  clear: "Clear"
+  pause: "Pause"
+  caps_lock: "Caps Lock"
+  scroll_lock: "Scroll Lock"
+  num_lock: "Num Lock"
+  print_screen: "Print Screen"
+  left_win: "Left Windows"
+  right_win: "Right Windows"
+  apps: "Menu"
+  alt: "Alt"
+  ctrl: "Ctrl"
+  shift: "Shift"
+  numpad_0: "Numpad 0"
+  numpad_1: "Numpad 1"
+  numpad_2: "Numpad 2"
+  numpad_3: "Numpad 3"
+  numpad_4: "Numpad 4"
+  numpad_5: "Numpad 5"
+  numpad_6: "Numpad 6"
+  numpad_7: "Numpad 7"
+  numpad_8: "Numpad 8"
+  numpad_9: "Numpad 9"
+  numpad_add: "Numpad +"
+  numpad_subtract: "Numpad -"
+  numpad_multiply: "Numpad *"
+  numpad_divide: "Numpad /"
+  numpad_decimal: "Numpad ."

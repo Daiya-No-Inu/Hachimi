@@ -1,52 +1,35 @@
-use super::gui_impl::input;
-use crate::il2cpp::hook::umamusume::StandaloneWindowResize::get_IsVirt;
-use crate::il2cpp::types::Il2CppImage;
-use crate::windows::game_impl;
-use crate::windows::game_impl::is_steam_release;
-use crate::{core::{game::Region, Gui, Hachimi}, il2cpp::{hook::{umamusume::SceneManager, UnityEngine_CoreModule}, symbols::Thread}, windows::utils};
+use std::{os::raw::c_uint, sync::{atomic::{self, AtomicIsize}, Arc}};
+
 use egui::mutex::Mutex;
 use once_cell::sync::Lazy;
-use std::ptr::null_mut;
-use std::{os::raw::c_uint, sync::atomic::{self, AtomicIsize}};
-use windows::Win32::Foundation::TRUE;
-use windows::Win32::UI::WindowsAndMessaging::{GetClientRect, GetWindowRect, SetWindowPos, HWND_NOTOPMOST, SWP_DEFERERASE, WMSZ_LEFT, WMSZ_RIGHT, WM_SIZING};
 use windows::{core::w, Win32::{
-    Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
+    Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     System::Threading::GetCurrentThreadId,
     UI::WindowsAndMessaging::{
         CallNextHookEx, DefWindowProcW, FindWindowW, GetWindowLongPtrW, SetWindowsHookExW, UnhookWindowsHookEx,
-        GWLP_WNDPROC, HCBT_MINMAX, HHOOK, SW_RESTORE, WH_CBT, WMSZ_BOTTOMLEFT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT, WM_CLOSE,
-        WM_KEYDOWN, WM_SIZE, WM_SYSKEYDOWN, WNDPROC
+        GWLP_WNDPROC, HCBT_MINMAX, HHOOK, SW_RESTORE, WH_CBT, WM_CLOSE, WM_KEYDOWN, WM_SYSKEYDOWN, WM_SIZE, WNDPROC
     }
 }};
 
-struct WndProcCall {
-    hwnd: HWND,
-    umsg: c_uint,
-    wparam: WPARAM,
-    lparam: LPARAM
-}
+use crate::{core::{game::Region, Gui, Hachimi}, il2cpp::{hook::{umamusume::SceneManager, UnityEngine_CoreModule}, symbols::Thread}, windows::utils};
+use rust_i18n::t;
 
-static WM_SIZE_BUFFER: Lazy<Mutex<Vec<WndProcCall>>> = Lazy::new(|| Mutex::default());
-pub fn drain_wm_size_buffer() {
-    let Some(orig_fn) = (unsafe { std::mem::transmute::<isize, WNDPROC>(WNDPROC_ORIG) }) else {
-        return;
-    };
-    for call in WM_SIZE_BUFFER.lock().drain(..) {
-        unsafe { orig_fn(call.hwnd, call.umsg, call.wparam, call.lparam); }
-    }
-}
+use super::{gui_impl::input, discord};
 
 static TARGET_HWND: AtomicIsize = AtomicIsize::new(0);
 pub fn get_target_hwnd() -> HWND {
     HWND(TARGET_HWND.load(atomic::Ordering::Relaxed))
 }
 
+static MENU_KEY_CAPTURE: atomic::AtomicBool = atomic::AtomicBool::new(false);
+pub fn start_menu_key_capture() {
+    MENU_KEY_CAPTURE.store(true, atomic::Ordering::Relaxed);
+}
+
 // Safety: only modified once on init
 static mut WNDPROC_ORIG: isize = 0;
 static mut WNDPROC_RECALL: usize = 0;
 extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-
     let Some(orig_fn) = (unsafe { std::mem::transmute::<isize, WNDPROC>(WNDPROC_ORIG) }) else {
         return unsafe { DefWindowProcW(hwnd, umsg, wparam, lparam) };
     };
@@ -54,6 +37,22 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
     match umsg {
         // Check for Home key presses
         WM_KEYDOWN | WM_SYSKEYDOWN => {
+            if MENU_KEY_CAPTURE.load(atomic::Ordering::Relaxed) {
+                MENU_KEY_CAPTURE.store(false, atomic::Ordering::Relaxed);
+                let hachimi = Hachimi::instance();
+                let mut new_config = hachimi.config.load().as_ref().clone();
+                new_config.windows.menu_open_key = wparam.0 as u16;
+                let _ = hachimi.save_config(&new_config);
+                hachimi.config.store(Arc::new(new_config));
+                let key_label = crate::windows::utils::vk_to_display_label(Hachimi::instance().config.load().windows.menu_open_key);
+                let msg = t!("notification.menu_open_key_set", key = key_label);
+                std::thread::spawn(move || {
+                    if let Some(gui) = Gui::instance() {
+                        gui.lock().unwrap().show_notification(&msg);
+                    }
+                });
+                return LRESULT(0);
+            }
             if wparam.0 as u16 == Hachimi::instance().config.load().windows.menu_open_key {
                 let Some(mut gui) = Gui::instance().map(|m| m.lock().unwrap()) else {
                     return unsafe { orig_fn(hwnd, umsg, wparam, lparam) };
@@ -61,6 +60,8 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
 
                 gui.toggle_menu();
                 return LRESULT(0);
+            }else if wparam.0 as u16 == Hachimi::instance().config.load().windows.hide_ingame_ui_hotkey_bind {
+                Thread::main_thread().schedule(Gui::toggle_game_ui);
             }
         },
         WM_CLOSE => {
@@ -74,20 +75,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
                 });
             }
             return LRESULT(0);
-        },
-        WM_SIZE => {
-            // if !SceneManager::is_splash_shown() {
-            //     WM_SIZE_BUFFER.lock().push(WndProcCall {
-            //         hwnd, umsg, wparam, lparam
-            //     });
-            //     return LRESULT(0);
-            // }
-            // else {
-                return unsafe { orig_fn(hwnd, umsg, wparam, lparam) };
-            // }
-        },
-        WM_SIZING=>{
-            return unlock_size(hwnd, umsg, wparam, lparam);
         },
         _ => ()
     }
@@ -116,8 +103,6 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
 
     LRESULT(0)
 }
-
-
 
 static mut HCBTHOOK: HHOOK = HHOOK(0);
 extern "system" fn cbt_proc(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -169,6 +154,12 @@ pub fn init() {
         if hachimi.window_always_on_top.load(atomic::Ordering::Relaxed) {
             _ = utils::set_window_topmost(hwnd, true);
         }
+
+        if hachimi.discord_rpc.load(atomic::Ordering::Relaxed) {
+            if let Err(e) = discord::start_rpc() {
+                 error!("{}", e);
+             }
+        }
     }
 }
 
@@ -181,166 +172,8 @@ pub fn uninit() {
             }
             HCBTHOOK = HHOOK(0);
         }
-    }
-}
-
-static mut last_height:i32=0;
-static mut last_width:i32=0;
-static g_aspect_ratio:f32=16f32/9f32;
-static g_force_landscape:bool = false;
-
-fn unlock_size(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LPARAM) ->LRESULT {
-    let rect_ptr = lparam.0 as *mut RECT;
-
-    if rect_ptr.is_null() {
-        return LRESULT(0);
-    }
-
-    let rect: &mut RECT = &mut unsafe { *rect_ptr };
-
-    let is_vert = is_virt();
-
-    if !is_vert || wparam.0 as u32 == WMSZ_LEFT || wparam.0 as u32 == WMSZ_RIGHT {
-        let ret = update_window_ratio(hwnd, rect, wparam, false);
-        rect.left = ret.left;
-        rect.right = ret.right;
-        rect.top = ret.top;
-        rect.bottom = ret.bottom;
-
-        return LRESULT(1);
-    }
-
-    let ratio: f32 = if is_vert {
-        1.0 / g_aspect_ratio
-    } else {
-        g_aspect_ratio
-    };
-
-    let mut height = (rect.bottom - rect.top) as f32;
-    let mut width = (rect.right - rect.left) as f32;
-
-    let new_ratio = width / height;
-
-    let last_h = unsafe { last_height } as f32;
-    let last_w = unsafe { last_width } as f32;
-
-    if (new_ratio > ratio && height >= last_h) || (width < last_w) {
-        height = width / ratio;
-    }
-    else if (new_ratio < ratio && width >= last_w) || (height < last_h) {
-        width = height * ratio;
-    }
-
-    match wparam.0 as u32 {
-        WMSZ_TOP | WMSZ_TOPLEFT | WMSZ_TOPRIGHT => {
-            rect.top = rect.bottom - height.round() as i32;
-        }
-        _ => {
-            rect.bottom = rect.top + height.round() as i32;
+        if let Err(e) = discord::stop_rpc() {
+            error!("{}", e);
         }
     }
-
-    match wparam.0 as u32 {
-        WMSZ_LEFT | WMSZ_TOPLEFT | WMSZ_BOTTOMLEFT => {
-            rect.left = rect.right - width.round() as i32;
-        }
-        _ => {
-            rect.right = rect.left + width.round() as i32;
-        }
-    }
-
-    unsafe {
-        last_height = height as i32;
-        last_width = width as i32;
-    }
-
-    LRESULT(1)
-}
-
-fn update_window_ratio(hwnd: HWND, modified_r:&mut RECT, wparam: WPARAM, resize_now:bool) ->RECT{
-    let mut window_r: RECT = Default::default();
-    let mut client_r: RECT = Default::default();
-
-    unsafe {
-        if let Err(err)=GetWindowRect(hwnd, &mut window_r){
-            error!("Error getting window rect {:?}: {}", hwnd, err);
-        }
-        if let Err(err)=GetClientRect(hwnd, &mut client_r){
-            error!("Error getting client rect {:?}: {}", hwnd, err);
-        }
-    }
-    let mut add_w = (modified_r.right - modified_r.left) as f32 - (window_r.right - window_r.left) as f32;
-    let mut add_h = (modified_r.bottom - modified_r.top) as f32 - (window_r.bottom - window_r.top) as f32;
-
-    if add_h != 0.0 {
-        add_w = add_h * g_aspect_ratio;
-    } else {
-        add_h = add_w / g_aspect_ratio;
-    }
-
-    let X = window_r.left;
-    let Y = window_r.top;
-    let mut cx = client_r.right as f32;
-    let mut cy;
-
-    let is_vert = is_virt();
-    if is_vert {
-        cy = cx * g_aspect_ratio;
-    } else {
-        cy = cx / g_aspect_ratio;
-    }
-
-    cx += add_w;
-    cy += add_h;
-
-    let new_width = cx + (window_r.right - window_r.left - client_r.right) as f32;
-    let new_height = cy + (window_r.bottom - window_r.top - client_r.bottom) as f32;
-
-    let mut new_window_r: RECT = Default::default();
-    new_window_r.left = X;
-    new_window_r.top = Y;
-    new_window_r.right = X + new_width.round() as i32;
-    new_window_r.bottom = Y + new_height.round() as i32;
-
-    match wparam.0 as u32 {
-        WMSZ_TOP | WMSZ_TOPLEFT | WMSZ_TOPRIGHT => {
-            new_window_r.top = (new_window_r.top as f32 - add_h).round() as i32;
-        }
-        _ => {}
-    }
-
-    match wparam.0 as u32 {
-        WMSZ_LEFT | WMSZ_TOPLEFT | WMSZ_BOTTOMLEFT => {
-            new_window_r.left = (new_window_r.left as f32 - add_w).round() as i32;
-        }
-        _ => {}
-    }
-
-    if resize_now {
-        let swp_cx = new_window_r.right - new_window_r.left;
-        let swp_cy = new_window_r.bottom - new_window_r.top;
-
-        unsafe {
-            if let Err(err)=SetWindowPos(
-                hwnd,
-                HWND_NOTOPMOST,
-                new_window_r.left,
-                new_window_r.top,
-                swp_cx,
-                swp_cy,
-                SWP_DEFERERASE,
-            ){
-                error!("Error setting window pos {:?}: {}", hwnd, err);
-            }
-        }
-    }
-
-    new_window_r
-}
-
-fn is_virt() -> bool {
-    if g_force_landscape{
-        return false;
-    }
-    get_IsVirt()
 }

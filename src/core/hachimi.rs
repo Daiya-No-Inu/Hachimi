@@ -1,4 +1,4 @@
-use std::{fs, io, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc, Mutex}, thread};
+use std::{fs, path::{Path, PathBuf}, process, sync::{atomic::{self, AtomicBool, AtomicI32}, Arc, Mutex}};
 use arc_swap::ArcSwap;
 use fnv::{FnvHashMap, FnvHashSet};
 use once_cell::sync::OnceCell;
@@ -32,6 +32,9 @@ pub struct Hachimi {
 
     #[cfg(target_os = "windows")]
     pub window_always_on_top: AtomicBool,
+
+    #[cfg(target_os = "windows")]
+    pub discord_rpc: AtomicBool,
 
     #[cfg(target_os = "windows")]
     pub updater: Arc<crate::windows::updater::Updater>
@@ -87,7 +90,7 @@ impl Hachimi {
 
     fn new() -> Result<Hachimi, Error> {
         let game = Game::init();
-        let config = Self::load_config(&game.data_dir)?;
+        let config = Self::load_config(&game.data_dir, &game.region)?;
 
         config.language.set_locale();
 
@@ -112,13 +115,16 @@ impl Hachimi {
             window_always_on_top: AtomicBool::new(config.windows.window_always_on_top),
 
             #[cfg(target_os = "windows")]
+            discord_rpc: AtomicBool::new(config.windows.discord_rpc),
+
+            #[cfg(target_os = "windows")]
             updater: Arc::default(),
 
             config: ArcSwap::new(Arc::new(config))
         })
     }
 
-    fn load_config(data_dir: &Path) -> io::Result<Config> {
+    fn load_config(data_dir: &Path, region: &Region) -> Result<Config, Error> {
         let config_path = data_dir.join("config.json");
         if fs::metadata(&config_path).is_ok() {
             let json = fs::read_to_string(&config_path)?;
@@ -130,7 +136,7 @@ impl Hachimi {
     }
 
     pub fn reload_config(&self) {
-        let new_config = match Self::load_config(&self.game.data_dir) {
+        let new_config = match Self::load_config(&self.game.data_dir, &self.game.region) {
             Ok(v) => v,
             Err(e) => {
                 error!("Failed to reload config: {}", e);
@@ -299,6 +305,8 @@ pub struct Config {
     #[serde(default)]
     pub disable_skill_name_translation: bool,
     #[serde(default)]
+    pub hide_ingame_ui_hotkey: bool,
+    #[serde(default)]
     pub language: Language,
     #[serde(default = "Config::default_meta_index_url")]
     pub meta_index_url: String,
@@ -321,9 +329,9 @@ impl Config {
     fn default_open_browser_url() -> String { "https://www.google.com/".to_owned() }
     fn default_virtual_res_mult() -> f32 { 1.0 }
     fn default_ui_scale() -> f32 { 1.0 }
-    fn default_story_choice_auto_select_delay() -> f32 { 0.75 }
-    fn default_story_tcps_multiplier() -> f32 { 1.0 }
-    fn default_meta_index_url() -> String { "https://files.leadrdrk.com/hachimi/meta/index.json".to_owned() }
+    fn default_story_choice_auto_select_delay() -> f32 { 1.2 }
+    fn default_story_tcps_multiplier() -> f32 { 3.0 }
+    fn default_meta_index_url() -> String { "https://gitlab.com/umatl/hachimi-meta/-/raw/main/meta.json".to_owned() }
     fn default_ui_animation_scale() -> f32 { 1.0 }
 }
 

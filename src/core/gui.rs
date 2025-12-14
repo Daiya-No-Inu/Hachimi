@@ -3,6 +3,7 @@ use std::{borrow::Cow, ops::RangeInclusive, sync::{atomic::{self, AtomicBool}, A
 use fnv::FnvHashSet;
 use once_cell::sync::OnceCell;
 use rust_i18n::t;
+use chrono::{Utc, Datelike};
 
 use crate::il2cpp::{
     hook::{
@@ -117,7 +118,17 @@ impl Gui {
 
             splash_visible: true,
             splash_tween: TweenInOutWithDelay::new(0.8, 3.0, Easing::OutQuad),
-            splash_sub_str: t!("splash_sub", open_key_str = t!(open_key_id)).into_owned(),
+            splash_sub_str: {
+                #[cfg(target_os = "windows")]
+                {
+                    let key_label = crate::windows::utils::vk_to_display_label(hachimi.config.load().windows.menu_open_key);
+                    t!("splash_sub", open_key_str = key_label).into_owned()
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    t!("splash_sub", open_key_str = t!(open_key_id)).into_owned()
+                }
+            },
 
             menu_visible: false,
             menu_anim_time: None,
@@ -157,8 +168,28 @@ impl Gui {
     }
 
     pub fn set_screen_size(&mut self, width: i32, height: i32) {
-        let main_axis_size = if width < height { width } else { height };
-        let pixels_per_point = main_axis_size as f32 * PIXELS_PER_POINT_RATIO;
+        let is_landscape = width > height;
+
+        let main_axis_size = if is_landscape {
+            height
+        } else {
+            width
+        };
+
+        let scaling_ratio = if is_landscape {
+            #[cfg(target_os = "android")]
+            {
+                PIXELS_PER_POINT_RATIO  // Android uses default (3.0/1080.0)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                1.5 / 1080.0  // Windows scaling
+            }
+        } else {
+            PIXELS_PER_POINT_RATIO  // 3.0/1080.0
+        };
+
+        let pixels_per_point = main_axis_size as f32 * scaling_ratio;
         self.context.set_pixels_per_point(pixels_per_point);
 
         self.input.screen_rect = Some(egui::Rect {
@@ -309,7 +340,7 @@ impl Gui {
                     });
                     #[cfg(target_os = "windows")]
                     {
-                        use crate::windows::{utils::set_window_topmost, wnd_hook};
+                        use crate::windows::{discord, utils::set_window_topmost, wnd_hook};
 
                         ui.horizontal(|ui| {
                             let prev_value = self.menu_vsync_value;
@@ -334,6 +365,17 @@ impl Gui {
                                     let topmost = Hachimi::instance().window_always_on_top.load(atomic::Ordering::Relaxed);
                                     unsafe { _ = set_window_topmost(wnd_hook::get_target_hwnd(), topmost); }
                                 });
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            let mut value = hachimi.discord_rpc.load(atomic::Ordering::Relaxed);
+                            
+                            ui.label(t!("menu.discord_rpc"));
+                            if ui.checkbox(&mut value, "").changed() {
+                                hachimi.discord_rpc.store(value, atomic::Ordering::Relaxed);
+                                if let Err(e) = if value { discord::start_rpc() } else { discord::stop_rpc() } {
+                                    error!("{}", e);
+                                }
                             }
                         });
                     }
@@ -413,7 +455,7 @@ impl Gui {
         }
     }
 
-    fn toggle_game_ui() {
+    pub fn toggle_game_ui() {
         use crate::il2cpp::hook::{
             UnityEngine_CoreModule::{Object, Behaviour, GameObject},
             UnityEngine_UIModule::Canvas,
@@ -704,6 +746,39 @@ fn simple_window_layout(ui: &mut egui::Ui, id: egui::Id, add_contents: impl FnOn
     });
 }
 
+fn centered_and_wrapped_text(ui: &mut egui::Ui, text: &str) {
+    let rect = ui.available_rect_before_wrap();
+
+    let text_style = egui::TextStyle::Body;
+    let text_font = ui.style().text_styles.get(&text_style).cloned().unwrap_or_default();
+    let text_color = ui.style().visuals.text_color();
+
+    let mut job = egui::text::LayoutJob::simple(
+        text.to_owned(),
+        text_font,
+        text_color,
+        rect.width()
+    );
+    job.halign = egui::Align::Center;
+
+    let galley = ui.fonts(|f| f.layout_job(job));
+
+    let mut text_rect = egui::Rect::NOTHING;
+    for row in &galley.rows {
+        text_rect = text_rect.union(row.visuals.mesh.calc_bounds());
+    }
+    let text_size = text_rect.size();
+
+    let center_pos = egui::pos2(
+        rect.left() + (rect.width() - text_size.x) / 2.0,
+        rect.top() + (rect.height() - text_size.y) / 2.0
+    );
+
+    let paint_pos = center_pos - text_rect.min.to_vec2();
+
+    ui.painter().galley(paint_pos, galley, text_color);
+}
+
 fn paginated_window_layout(ui: &mut egui::Ui, id: egui::Id, i: &mut usize, page_count: usize, add_page_content: impl FnOnce(&mut egui::Ui, usize) -> bool) -> bool {
     let allow_next = add_page_content(ui, *i);
     egui::TopBottomPanel::bottom(id.with("bottom_panel"))
@@ -781,13 +856,9 @@ impl Window for SimpleYesNoDialog {
         .id(self.id)
         .open(&mut open)
         .show(ctx, |ui| {
-            simple_window_layout(ui, self.id,
-                |ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(&self.content);
-                    });
-                },
-                |ui| {
+            egui::TopBottomPanel::bottom(self.id.with("bottom_panel"))
+            .show_inside(ui, |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     if ui.button(t!("no")).clicked() {
                         open2 = false;
                     }
@@ -795,8 +866,14 @@ impl Window for SimpleYesNoDialog {
                         result = true;
                         open2 = false;
                     }
-                }
-            );
+                })
+            });
+
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none())
+                .show_inside(ui, |ui| {
+                centered_and_wrapped_text(ui, &self.content);
+            });
         });
 
         if open && open2 {
@@ -836,18 +913,20 @@ impl Window for SimpleOkDialog {
         .id(self.id)
         .open(&mut open)
         .show(ctx, |ui| {
-            simple_window_layout(ui, self.id,
-                |ui| {
-                    ui.centered_and_justified(|ui| {
-                        ui.label(&self.content);
-                    });
-                },
-                |ui| {
+            egui::TopBottomPanel::bottom(self.id.with("bottom_panel"))
+            .show_inside(ui, |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     if ui.button(t!("ok")).clicked() {
                         open2 = false;
                     }
-                }
-            );
+                })
+            });
+
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none())
+                .show_inside(ui, |ui| {
+                centered_and_wrapped_text(ui, &self.content);
+            });
         });
 
         if open && open2 {
@@ -890,6 +969,12 @@ impl ConfigEditor {
             id: random_id(),
             current_tab: ConfigEditorTab::General
         }
+    }
+
+    fn restore_defaults(&mut self) {
+        let current_language = self.config.language;
+        self.config = hachimi::Config::default();
+        self.config.language = current_language;
     }
 
     fn option_slider<Num: egui::emath::Numeric>(ui: &mut egui::Ui, label: &str, value: &mut Option<Num>, range: RangeInclusive<Num>) {
@@ -938,6 +1023,27 @@ impl ConfigEditor {
                 }
                 ui.end_row();
 
+                #[cfg(target_os = "windows")]
+                {
+                    ui.label(t!("config_editor.discord_rpc"));
+                    ui.checkbox(&mut config.windows.discord_rpc, "");
+                    ui.end_row();
+
+                    ui.label(t!("config_editor.menu_open_key"));
+                    ui.horizontal(|ui| {
+                        ui.label(crate::windows::utils::vk_to_display_label(config.windows.menu_open_key));
+                        if ui.button(t!("config_editor.menu_open_key_set")).clicked() {
+                            crate::windows::wnd_hook::start_menu_key_capture();
+                            thread::spawn(|| {
+                                Gui::instance().unwrap()
+                                .lock().unwrap()
+                                .show_notification(&t!("notification.press_to_set_menu_key"));
+                            });
+                        }
+                    });
+                    ui.end_row();
+                }
+
                 ui.label(t!("config_editor.debug_mode"));
                 ui.checkbox(&mut config.debug_mode, "");
                 ui.end_row();
@@ -967,11 +1073,35 @@ impl ConfigEditor {
                 ui.end_row();
 
                 ui.label(t!("config_editor.auto_translate_stories"));
-                ui.checkbox(&mut config.auto_translate_stories, "");
+                if ui.checkbox(&mut config.auto_translate_stories, "").clicked() {
+                    if config.auto_translate_stories {
+                        thread::spawn(|| {
+                            Gui::instance().unwrap()
+                            .lock().unwrap()
+                            .show_window(Box::new(SimpleOkDialog::new(
+                                &t!("warning"),
+                                &t!("config_editor.auto_tl_warning"),
+                                || {}
+                            )));
+                        });
+                    }
+                }
                 ui.end_row();
 
                 ui.label(t!("config_editor.auto_translate_ui"));
-                ui.checkbox(&mut config.auto_translate_localize, "");
+                if ui.checkbox(&mut config.auto_translate_localize, "").clicked() {
+                    if config.auto_translate_localize {
+                        thread::spawn(|| {
+                            Gui::instance().unwrap()
+                            .lock().unwrap()
+                            .show_window(Box::new(SimpleOkDialog::new(
+                                &t!("warning"),
+                                &t!("config_editor.auto_tl_warning"),
+                                || {}
+                            )));
+                        });
+                    }
+                }
                 ui.end_row();
             },
 
@@ -1065,6 +1195,22 @@ impl ConfigEditor {
                 ui.checkbox(&mut config.live_theater_allow_same_chara, "");
                 ui.end_row();
 
+                ui.label(t!("config_editor.hide_ingame_ui_hotkey"));
+                if ui.checkbox(&mut config.hide_ingame_ui_hotkey, "").clicked() {
+                    if config.hide_ingame_ui_hotkey {
+                        thread::spawn(|| {
+                            Gui::instance().unwrap()
+                            .lock().unwrap()
+                            .show_window(Box::new(SimpleOkDialog::new(
+                                &t!("info"),
+                                &t!("config_editor.hide_ingame_ui_hotkey_info"),
+                                || {}
+                            )));
+                        });
+                    }
+                }
+                ui.end_row();
+
                 ui.label(t!("config_editor.disable_skill_name_translation"));
                 ui.checkbox(&mut config.disable_skill_name_translation, "");
                 ui.end_row();
@@ -1087,6 +1233,11 @@ impl Window for ConfigEditor {
         let mut open = true;
         let mut open2 = true;
         let mut config = self.config.clone();
+        #[cfg(target_os = "windows")]
+        {
+            config.windows.menu_open_key = Hachimi::instance().config.load().windows.menu_open_key;
+        }
+        let mut reset_clicked = false;
 
         new_window(ctx, t!("config_editor.title"))
         .id(self.id)
@@ -1133,18 +1284,30 @@ impl Window for ConfigEditor {
                     });
                 },
                 |ui| {
-                    if ui.button(t!("cancel")).clicked() {
-                        open2 = false;
-                    }
-                    if ui.button(t!("save")).clicked() {
-                        save_and_reload_config(self.config.clone());
-                        open2 = false;
-                    }
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                        if ui.button(t!("config_editor.restore_defaults")).clicked() {
+                            reset_clicked = true;
+                        }
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                            if ui.button(t!("cancel")).clicked() {
+                                open2 = false;
+                            }
+                            if ui.button(t!("save")).clicked() {
+                                save_and_reload_config(self.config.clone());
+                                open2 = false;
+                            }
+                        });
+                    });
                 }
             );
         });
 
         self.config = config;
+
+        if reset_clicked {
+            self.restore_defaults();
+        }
 
         open &= open2;
         if !open {
@@ -1177,7 +1340,7 @@ struct FirstTimeSetupWindow {
     id: egui::Id,
     index_request: Arc<AsyncRequest<Vec<RepoInfo>>>,
     current_page: usize,
-    current_tl_repo: usize
+    current_tl_repo: Option<String>
 }
 
 impl FirstTimeSetupWindow {
@@ -1186,7 +1349,7 @@ impl FirstTimeSetupWindow {
             id: random_id(),
             index_request: Arc::new(tl_repo::new_meta_index_request()),
             current_page: 0,
-            current_tl_repo: 0
+            current_tl_repo: None
         }
     }
 }
@@ -1227,23 +1390,31 @@ impl Window for FirstTimeSetupWindow {
                         ui.label(t!("first_time_setup.select_translation_repo"));
                         ui.add_space(4.0);
 
-                        let mut selected = false;
+                        let mut is_index_loaded = false;
                         async_request_ui_content(ui, self.index_request.clone(), |ui, repo_list| {
-                            selected = repo_list.get(self.current_tl_repo).is_some();
+                            is_index_loaded = true;
+                            let filtered_repos: Vec<_> = repo_list.iter()
+                                .filter(|repo| repo.region == Hachimi::instance().game.region)
+                                .collect();
                             egui::ScrollArea::vertical().show(ui, |ui| {
                                 egui::Frame::none()
                                 .inner_margin(egui::Margin::symmetric(8.0, 0.0))
                                 .show(ui, |ui| {
-                                    for (i, repo) in repo_list.iter().enumerate() {
-                                        ui.radio_value(&mut self.current_tl_repo, i, &repo.name);
+                                    if filtered_repos.is_empty() {
+                                        ui.label(t!("first_time_setup.no_compatible_repo"));
+                                        return;
+                                    }
+                                    for repo in filtered_repos {
+                                        ui.radio_value(&mut self.current_tl_repo, Some(repo.index.clone()), &repo.name);
                                         if let Some(short_desc) = &repo.short_desc {
                                             ui.label(egui::RichText::new(short_desc).small());
                                         }
                                     }
+                                    ui.radio_value(&mut self.current_tl_repo, None, t!("first_time_setup.skip_translation"));
                                 });
                             });
                         });
-                        selected
+                        is_index_loaded
                     }
                     2 => {
                         ui.heading(t!("first_time_setup.complete_heading"));
@@ -1263,19 +1434,7 @@ impl Window for FirstTimeSetupWindow {
             config.skip_first_time_setup = true;
 
             if !page_open {
-                let Some(res) = &**self.index_request.result.load() else {
-                    return open_res;
-                };
-
-                let Ok(repo_list) = res else {
-                    return open_res;
-                };
-
-                let Some(repo) = repo_list.get(self.current_tl_repo) else {
-                    return open_res;
-                };
-
-                config.translation_repo_index = Some(repo.index.clone());
+                config.translation_repo_index = self.current_tl_repo.clone();
             }
 
             save_and_reload_config(config);
@@ -1316,7 +1475,7 @@ impl Window for AboutWindow {
                     ui.label(env!("HACHIMI_DISPLAY_VERSION"));
                 });
             });
-            ui.label(t!("about.copyright"));
+            ui.label(t!("about.copyright", year = Utc::now().year()));
             ui.horizontal(|ui| {
                 if ui.button(t!("about.view_license")).clicked() {
                     thread::spawn(|| {

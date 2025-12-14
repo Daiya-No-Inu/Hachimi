@@ -58,7 +58,7 @@ pub mod SceneManager;
 
 #[cfg(target_os = "windows")]
 mod PaymentUtility;
-pub mod StandaloneWindowResize;
+mod LowResolutionCamera;
 
 pub fn init() {
     get_assembly_image_or_return!(image, "umamusume.dll");
@@ -121,6 +121,6 @@ pub fn init() {
     {
         SceneManager::init(image);
         PaymentUtility::init(image);
-        StandaloneWindowResize::init(image);
     }
+    LowResolutionCamera::init(image);
 }
