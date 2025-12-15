@@ -7,13 +7,24 @@ use windows::{core::w, Win32::{
     System::Threading::GetCurrentThreadId,
     UI::WindowsAndMessaging::{
         CallNextHookEx, DefWindowProcW, FindWindowW, GetWindowLongPtrW, SetWindowsHookExW, UnhookWindowsHookEx,
-        GWLP_WNDPROC, HCBT_MINMAX, HHOOK, SW_RESTORE, WH_CBT, WM_CLOSE, WM_KEYDOWN, WM_SYSKEYDOWN, WM_SIZE, WNDPROC
+        GWLP_WNDPROC, HCBT_MINMAX, HHOOK, SW_RESTORE, WH_CBT, WM_CLOSE, WM_KEYDOWN, WM_SYSKEYDOWN, WM_SIZE, WNDPROC,
+        WHEEL_DELTA, WM_CHAR, WM_KEYUP,
+        WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDBLCLK, WM_MBUTTONDOWN,
+        WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDBLCLK,
+        WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYUP,
+
     }
 }};
 
 use crate::{core::{game::Region, Gui, Hachimi}, il2cpp::{hook::{umamusume::SceneManager, UnityEngine_CoreModule}, symbols::Thread}, windows::utils};
 use rust_i18n::t;
-
+use tiny_http::Method::Get;
+use windows::core::{PCSTR, PCWSTR};
+use windows::Win32::Foundation;
+use windows::Win32::Foundation::{FALSE, TRUE};
+use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+use crate::il2cpp::hook::umamusume::StandaloneWindowResize;
+use crate::windows::hachimi_impl::ResolutionScaling;
 use super::{gui_impl::input, discord};
 
 static TARGET_HWND: AtomicIsize = AtomicIsize::new(0);
@@ -79,8 +90,10 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
         _ => ()
     }
 
+
     // Only capture input if gui needs it
     if !Gui::is_consuming_input_atomic() {
+
         return unsafe { orig_fn(hwnd, umsg, wparam, lparam) };
     }
 
@@ -103,6 +116,7 @@ extern "system" fn wnd_proc(hwnd: HWND, umsg: c_uint, wparam: WPARAM, lparam: LP
 
     LRESULT(0)
 }
+
 
 static mut HCBTHOOK: HHOOK = HHOOK(0);
 extern "system" fn cbt_proc(ncode: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
