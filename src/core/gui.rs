@@ -7,7 +7,7 @@ use chrono::{Utc, Datelike};
 
 use crate::il2cpp::{
     hook::{
-        umamusume::{CySpringController::SpringUpdateMode, GameSystem, GraphicSettings::GraphicsQuality, Localize},
+        umamusume::{CySpringController::SpringUpdateMode, GameSystem, GraphicSettings::{GraphicsQuality, MsaaQuality}, Localize},
         UnityEngine_CoreModule::Application
     },
     symbols::Thread
@@ -1118,6 +1118,19 @@ impl ConfigEditor {
 
                 ui.label(t!("config_editor.ui_animation_scale"));
                 ui.add(egui::Slider::new(&mut config.ui_animation_scale, 0.1..=10.0).step_by(0.1));
+                ui.end_row();
+
+                ui.label(t!("config_editor.render_scale"));
+                ui.add(egui::Slider::new(&mut config.render_scale, 0.1..=10.0).step_by(0.1));
+                ui.end_row();
+
+                ui.label(t!("config_editor.msaa"));
+                Gui::run_combo(ui, "msaa", &mut config.msaa, &[
+                    (MsaaQuality:: Disabled, &t!("default")),
+                    (MsaaQuality::_2x, "2x"),
+                    (MsaaQuality::_4x, "4x"),
+                    (MsaaQuality::_8x, "8x")
+                ]);
                 ui.end_row();
 
                 ui.label(t!("config_editor.graphics_quality"));

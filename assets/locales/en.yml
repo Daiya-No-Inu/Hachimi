@@ -160,6 +160,8 @@ config_editor:
   discord_rpc: "Discord RPC"
   menu_open_key: "Open menu hotkey"
   menu_open_key_set: "Press to set"
+  msaa: "MSAA"
+  render_scale: "Render Scale"
 
 tl_update_dialog:
   title: "New update available"
