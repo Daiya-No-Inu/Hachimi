@@ -1,6 +1,11 @@
 /build
 /target
 /.vscode
+/.idea/
+/.vs/
+/.vs
+/move.bat
+/.idea
 /.vs
 /move.bat
 /.idea
