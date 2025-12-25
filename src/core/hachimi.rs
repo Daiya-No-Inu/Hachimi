@@ -3,6 +3,7 @@ use arc_swap::ArcSwap;
 use fnv::{FnvHashMap, FnvHashSet};
 use once_cell::sync::OnceCell;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use textwrap::wrap_algorithms::Penalties;
 
 use crate::{core::plugin_api::Plugin, gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}}};
 #[cfg(target_os = "android")]
@@ -282,8 +283,16 @@ pub struct Config {
     pub disable_auto_update_check: bool,
     #[serde(default)]
     pub disable_translations: bool,
+    #[serde(default = "Config::default_gui_scale")]
+    pub gui_scale: f32,
     #[serde(default = "Config::default_ui_scale")]
     pub ui_scale: f32,
+    #[serde(default = "Config::default_render_scale")]
+    pub render_scale: f32,
+    #[serde(default)]
+    pub msaa: crate::il2cpp::hook::umamusume::GraphicSettings::MsaaQuality,
+    #[serde(default)]
+    pub aniso_level: crate::il2cpp::hook::UnityEngine_CoreModule::Texture::AnisoLevel,
     #[serde(default)]
     pub graphics_quality: crate::il2cpp::hook::umamusume::GraphicSettings::GraphicsQuality,
     #[serde(default = "Config::default_story_choice_auto_select_delay")]
@@ -330,6 +339,8 @@ impl Config {
     fn default_open_browser_url() -> String { "https://www.google.com/".to_owned() }
     fn default_virtual_res_mult() -> f32 { 1.0 }
     fn default_ui_scale() -> f32 { 1.0 }
+    fn default_render_scale() -> f32 { 1.0 }
+    fn default_gui_scale() -> f32 { 1.0 }
     fn default_story_choice_auto_select_delay() -> f32 { 1.2 }
     fn default_story_tcps_multiplier() -> f32 { 3.0 }
     fn default_meta_index_url() -> String { "https://gitlab.com/umatl/hachimi-meta/-/raw/main/meta.json".to_owned() }
@@ -374,7 +385,10 @@ pub enum Language {
     SChinese,
 
     #[serde(rename = "vi")]
-    Vietnamese
+    Vietnamese,
+
+    #[serde(rename = "es")]
+    Spanish
 }
 
 impl Language {
@@ -382,7 +396,8 @@ impl Language {
         Self::English.choice(),
         Self::TChinese.choice(),
         Self::SChinese.choice(),
-        Self::Vietnamese.choice()
+        Self::Vietnamese.choice(),
+        Self::Spanish.choice()
     ];
 
     pub fn set_locale(&self) {
@@ -394,7 +409,8 @@ impl Language {
             Language::English => "en",
             Language::TChinese => "zh-tw",
             Language::SChinese => "zh-cn",
-            Language::Vietnamese => "vi"
+            Language::Vietnamese => "vi",
+            Language::Spanish => "es"
         }
     }
 
@@ -403,7 +419,8 @@ impl Language {
             Language::English => "English",
             Language::TChinese => "繁體中文",
             Language::SChinese => "简体中文",
-            Language::Vietnamese => "Tiếng Việt"
+            Language::Vietnamese => "Tiếng Việt",
+            Language::Spanish => "Español (ES)"
         }
     }
 
@@ -426,7 +443,9 @@ pub struct LocalizedData {
     assets_path: Option<PathBuf>,
 
     pub plural_form: plurals::Resolver,
-    pub ordinal_form: plurals::Resolver
+    pub ordinal_form: plurals::Resolver,
+
+    pub wrapper_penalties: Penalties
 }
 
 impl LocalizedData {
@@ -463,6 +482,8 @@ impl LocalizedData {
         let plural_form = Self::parse_plural_form_or_default(&config.plural_form)?;
         let ordinal_form = Self::parse_plural_form_or_default(&config.ordinal_form)?;
 
+        let wrapper_penalties = Self::parse_wrap_penalties_or_default(&config.wrapper_penalties);
+
         Ok(LocalizedData {
             localize_dict: Self::load_dict_static(&path, config.localize_dict.as_ref()).unwrap_or_default(),
             hashed_dict: Self::load_dict_static(&path, config.hashed_dict.as_ref()).unwrap_or_default(),
@@ -478,6 +499,8 @@ impl LocalizedData {
 
             plural_form,
             ordinal_form,
+
+            wrapper_penalties,
 
             config,
             path
@@ -535,6 +558,19 @@ impl LocalizedData {
         }
     }
 
+    fn parse_wrap_penalties_or_default(opt: &Option<PenaltiesConfig>) -> Penalties {
+        let Some(cfg) = opt else {
+            return Penalties::new()
+        };
+        Penalties {
+            nline_penalty: cfg.nline_penalty,
+            overflow_penalty: cfg.overflow_penalty,
+            short_last_line_fraction: cfg.short_last_line_fraction,
+            short_last_line_penalty: cfg.short_last_line_penalty,
+            hyphen_penalty: cfg.hyphen_penalty
+        }
+    }
+
     pub fn get_assets_path<P: AsRef<Path>>(&self, rel_path: P) -> Option<PathBuf> {
         self.assets_path.as_ref().map(|p| p.join(rel_path))
     }
@@ -582,13 +618,17 @@ pub struct LocalizedDataConfig {
     // Predefined line widths are counts of cjk characters.
     // 1 cjk char = 2 columns, so setting this value to 2 replicates the default behaviour.
     pub line_width_multiplier: Option<f32>,
+    #[serde(default)]
+    pub systext_cue_lines: FnvHashMap<String, i32>,
+    pub wrapper_penalties: Option<PenaltiesConfig>,
 
     #[serde(default)]
     pub auto_adjust_story_clip_length: bool,
     pub story_line_count_offset: Option<i32>,
     pub text_frame_line_spacing_multiplier: Option<f32>,
     pub text_frame_font_size_multiplier: Option<f32>,
-    pub skill_list_item_desc_font_size_multiplier: Option<f32>,
+    #[serde(default)]
+    pub skill_formatting: SkillFormatting,
     #[serde(default)]
     pub text_common_allow_overflow: bool,
     #[serde(default)]
@@ -668,4 +708,44 @@ impl<T> AssetInfo<T> {
 #[derive(Deserialize, Clone, Default)]
 pub struct AssetMetadata {
     pub bundle_name: Option<String>
+}
+
+#[derive(Deserialize, Clone)]
+pub struct PenaltiesConfig {
+    nline_penalty: usize,
+    overflow_penalty: usize,
+    short_last_line_fraction: usize,
+    short_last_line_penalty: usize,
+    hyphen_penalty: usize
+}
+
+#[derive(Deserialize, Clone)]
+pub struct SkillFormatting {
+    #[serde(default = "SkillFormatting::default_length")]
+    pub name_length: i32,
+    #[serde(default = "SkillFormatting::default_length")]
+    pub desc_length: i32,
+    #[serde(default = "SkillFormatting::default_lines")]
+    pub name_short_lines: i32,
+
+    #[serde(default = "SkillFormatting::default_mult")]
+    pub name_short_mult: f32,
+    #[serde(default = "SkillFormatting::default_mult")]
+    pub name_sp_mult: f32,
+}
+impl SkillFormatting {
+    fn default_length() -> i32 { 18 }
+    fn default_lines() -> i32 { 1 }
+    fn default_mult() -> f32 { 1.0 }
+}
+
+impl Default for SkillFormatting {
+    fn default() -> Self {
+        SkillFormatting {
+            name_length: 13,
+            desc_length: 18,
+            name_short_lines: 1,
+            name_short_mult: 1.0,
+            name_sp_mult: 1.0 }
+    }
 }
