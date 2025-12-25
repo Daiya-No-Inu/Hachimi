@@ -286,6 +286,8 @@ pub struct Config {
     #[serde(default)]
     pub msaa: crate::il2cpp::hook::umamusume::GraphicSettings::MsaaQuality,
     #[serde(default)]
+    pub aniso_level: crate::il2cpp::hook::UnityEngine_CoreModule::Texture::AnisoLevel,
+    #[serde(default)]
     pub graphics_quality: crate::il2cpp::hook::umamusume::GraphicSettings::GraphicsQuality,
     #[serde(default = "Config::default_story_choice_auto_select_delay")]
     pub story_choice_auto_select_delay: f32,

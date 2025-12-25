@@ -9,7 +9,7 @@ use chrono::{Utc, Datelike};
 use crate::il2cpp::{
     hook::{
         umamusume::{CySpringController::SpringUpdateMode, GameSystem, GraphicSettings::{GraphicsQuality, MsaaQuality}, Localize},
-        UnityEngine_CoreModule::Application
+        UnityEngine_CoreModule::{Application, Texture::AnisoLevel}
     },
     symbols::Thread
 };
@@ -1211,6 +1211,16 @@ impl ConfigEditor {
                     (MsaaQuality::_2x, "2x"),
                     (MsaaQuality::_4x, "4x"),
                     (MsaaQuality::_8x, "8x")
+                ]);
+                ui.end_row();
+
+                ui.label(t!("config_editor.aniso_level"));
+                Gui::run_combo(ui, "aniso_level", &mut config.aniso_level, &[
+                    (AnisoLevel::Default, &t!("default")),
+                    (AnisoLevel::_2x, "2x"),
+                    (AnisoLevel::_4x, "4x"),
+                    (AnisoLevel::_8x, "8x"),
+                    (AnisoLevel::_16x, "16x")
                 ]);
                 ui.end_row();
 
