@@ -6,10 +6,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use textwrap::wrap_algorithms::Penalties;
 
 use crate::{core::plugin_api::Plugin, gui_impl, hachimi_impl, il2cpp::{self, hook::umamusume::{CySpringController::SpringUpdateMode, GameSystem}}};
-#[cfg(target_os = "android")]
-use crate::android::plugin;
-use crate::core::game::Region;
-use super::{game::Game, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
+
+use super::{game::{Game, Region}, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
 pub struct Hachimi {
     // Hooking stuff
@@ -220,10 +218,6 @@ impl Hachimi {
 
         hachimi_impl::on_hooking_finished(self);
 
-        #[cfg(target_os = "android")]
-        plugin::init();
-
-        #[cfg(target_os = "windows")]
         for plugin in self.plugins.lock().unwrap().iter() {
             info!("Initializing plugin: {}", plugin.name);
             let res = plugin.init();
@@ -240,14 +234,17 @@ impl Hachimi {
     pub fn run_auto_update_check(&self) {
         if !self.config.load().disable_auto_update_check {
             #[cfg(not(target_os = "windows"))]
-            self.tl_updater.clone().check_for_updates(false);
+            if !self.config.load().translator_mode {
+                self.tl_updater.clone().check_for_updates(false);
+            }
 
             // Check for hachimi updates first, then translations
             // Don't auto check for tl updates if it's not up to date
             #[cfg(target_os = "windows")]
             self.updater.clone().check_for_updates(|new_update| {
-                if !new_update {
-                    Hachimi::instance().tl_updater.clone().check_for_updates(false);
+                let hachimi = Hachimi::instance();
+                if !new_update && !hachimi.config.load().translator_mode {
+                    hachimi.tl_updater.clone().check_for_updates(false);
                 }
             });
         }
@@ -372,11 +369,11 @@ impl<T> OsOption<T> {
     }
 }
 
-#[derive(Default, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
 #[allow(non_camel_case_types)]
 pub enum Language {
     #[serde(rename = "en")]
-    #[default] English,
+    English,
 
     #[serde(rename = "zh-tw")]
     TChinese,
@@ -387,8 +384,30 @@ pub enum Language {
     #[serde(rename = "vi")]
     Vietnamese,
 
+    #[serde(rename = "id")]
+    Indonesian,
+
     #[serde(rename = "es")]
     Spanish
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        let locale = sys_locale::get_locale().as_deref().unwrap_or("en").to_lowercase();
+        if locale.contains("zh-hk") || locale.contains("zh-tw") || locale.contains("zh-hant") {
+            Self::TChinese
+        } else if locale.contains("zh") {
+            Self::SChinese
+        } else if locale.starts_with("vi") {
+            Self::Vietnamese
+        } else if locale.starts_with("id") {
+            Self::Indonesian
+        } else if locale.starts_with("es") {
+            Self::Spanish
+        } else {
+            Self::English
+        }
+    }
 }
 
 impl Language {
@@ -397,6 +416,7 @@ impl Language {
         Self::TChinese.choice(),
         Self::SChinese.choice(),
         Self::Vietnamese.choice(),
+        Self::Indonesian.choice(),
         Self::Spanish.choice()
     ];
 
@@ -410,6 +430,7 @@ impl Language {
             Language::TChinese => "zh-tw",
             Language::SChinese => "zh-cn",
             Language::Vietnamese => "vi",
+            Language::Indonesian => "id",
             Language::Spanish => "es"
         }
     }
@@ -420,6 +441,7 @@ impl Language {
             Language::TChinese => "繁體中文",
             Language::SChinese => "简体中文",
             Language::Vietnamese => "Tiếng Việt",
+            Language::Indonesian => "Bahasa Indonesia",
             Language::Spanish => "Español (ES)"
         }
     }

@@ -65,6 +65,8 @@ notification:
   errors_during_update: "%{count} lỗi đã xảy ra trong lúc cập nhật. Kiểm tra log để biết thêm thông tin."
   checking_for_updates: "Đang kiểm tra cập nhật..."
   no_updates: "Không có bản cập nhật."
+  ipc_softreset_exec: "Đã khởi động mềm IPC từ xa."
+
 
 first_time_setup:
   title: "Thiết lập lần đầu"
@@ -115,6 +117,7 @@ config_editor:
   target_fps: "Đặt FPS"
   virtual_resolution_multiplier: "Số nhân độ\nphân giải ảo"
   ui_scale: "Tỷ lệ UI"
+  gui_scale: "Tỷ lệ lớp phủ"
   graphics_quality: "Chất lượng đồ họa"
   vsync: "VSync"
   auto_full_screen: "Tự động toàn màn hình"
