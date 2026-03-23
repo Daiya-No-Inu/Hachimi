@@ -1,6 +1,7 @@
 /build
 /target
 /.vscode
+/plugins
 /.idea/
 /.vs/
 /.vs
