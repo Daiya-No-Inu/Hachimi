@@ -1,10 +1,10 @@
-use std::ptr;
 use crate::core::game::Region;
 use crate::core::Hachimi;
 use crate::il2cpp::hook::umamusume::Screen as GallopScreen;
 use crate::il2cpp::hook::UnityEngine_CoreModule;
 use crate::il2cpp::hook::UnityEngine_CoreModule::Screen as UnityScreen;
 use crate::windows::hachimi_impl::ResolutionScaling;
+use std::ptr;
 use windows::core::{w, BOOL, PCSTR, PCWSTR};
 use windows::Win32::Foundation;
 use windows::Win32::Foundation::{FALSE, HWND, POINT, TRUE};
@@ -81,7 +81,7 @@ pub fn init() {
         let get_cursor_pos_addr = GetProcAddress(handle, PCSTR("GetCursorPos".as_ptr())).unwrap();
         match Hachimi::instance()
             .interceptor
-            .hook(get_cursor_pos_addr as _, get_cursor_pos as _)
+            .hook(get_cursor_pos_addr as _, get_cursor_pos as *const () as usize)
         {
             Ok(trampoline_addr) => GET_CURSOR_POS = trampoline_addr as _,
             Err(e) => error!("Failed to hook GetCursorPos: {}", e),

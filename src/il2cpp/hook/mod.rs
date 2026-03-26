@@ -77,7 +77,6 @@ pub mod UnityEngine_UI;
 pub mod UnityEngine_UIModule;
 pub mod Unity_TextMeshPro;
 
-// pub mod Gallop_HttpHelper;
 pub mod LibNative_Runtime;
 pub mod umamusume;
 pub mod Cute_UI_Assembly;
@@ -106,7 +105,6 @@ pub fn init() {
 
     // Umamusume
     LibNative_Runtime::init();
-    // Gallop_HttpHelper::init();
     umamusume::init();
     Cute_UI_Assembly::init();
     Plugins::init();
